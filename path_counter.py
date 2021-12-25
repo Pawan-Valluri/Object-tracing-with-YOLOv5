@@ -46,7 +46,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         source=ROOT / 'data/images',  # file/dir/URL/glob, 0 for webcam
         imgsz=640,  # inference size (pixels)
         conf_thres=0.25,  # confidence threshold
-        iou_thres=0.45,  # NMS IOU threshold
+        iou_thres=0.75,  # NMS IOU threshold
         max_det=1000,  # maximum detections per image
         device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
         view_img=False,  # show results
@@ -55,7 +55,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         save_crop=False,  # save cropped prediction boxes
         nosave=False,  # do not save images/videos
         classes=None,  # filter by class: --class 0, or --class 0 2 3
-        agnostic_nms=False,  # class-agnostic NMS
+        agnostic_nms=True,  # class-agnostic NMS
         augment=False,  # augmented inference
         visualize=False,  # visualize features
         update=False,  # update all models
@@ -69,7 +69,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         dnn=False,  # use OpenCV DNN for ONNX inference
         ):
     source = str(source)
-    # source = "/home/bubble/Downloads/road01.mp4"
+    source = "/home/bubble/Downloads/road01.mp4"
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
     is_url = source.lower().startswith(('rtsp://', 'rtmp://', 'http://', 'https://'))
@@ -106,7 +106,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     # Run inference
     model.warmup(imgsz=(1, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
-    det_buffer = [[]]  ###############
+    path_count = 0  ###############
     paths_trace = []  ###############    
     for path, im, im0s, vid_cap, s in dataset:
         t1 = time_sync()
@@ -174,38 +174,40 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
-            
-            det_buffer.append(det_current)
-            det_buffer.pop(0)
+            paths_now = len(det_current)
             paths_to_be_popped = []
             if len(paths_trace)==0: # this happens for the first frame
                 for k in det_current:
-                    paths_trace.append([k])
+                    paths_trace.append([0, [k]]) # new paths
+                    path_count += 1
             else:
                 for k in range(len(paths_trace)):
                     min_dist = 10000
                     for j in range(len(det_current)):
-                        dist = distxy(paths_trace[k][-1], det_current[j])
+                        dist = distxy(paths_trace[k][1][-1], det_current[j])
                         if dist < min_dist:
                             min_dist =  dist
                             closest = j
                     if min_dist < 30:
-                        paths_trace[k].append(det_current[closest])
+                        paths_trace[k][1].append(det_current[closest])
                         det_current.pop(closest)
                     else:
                         paths_to_be_popped.append(paths_trace[k])
+                        paths_trace[k][0] += 1
                 
                 for k in paths_to_be_popped:
-                    paths_trace.remove(k)
+                    if k[0] > 3:
+                        paths_trace.remove(k)
                 
                 
                 for k in paths_trace:
-                    while len(k) > 5:
-                        k.pop(0)
+                    while len(k[1]) > 5:
+                        k[1].pop(0)
                                     
                 if len(det_current):
                     for j in det_current:
-                        paths_trace.append([j])
+                        paths_trace.append([0, [j]]) # new path
+                        path_count += 1
             # print(paths_trace)
 
             # Print time (inference-only)
@@ -213,10 +215,11 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
             # Stream results
             im0 = annotator.result()
+            im0 = cv2.putText(im0, f"vehicles_now: {paths_now}, Vehicles_total: {path_count}", (0,30), cv2.FONT_HERSHEY_SIMPLEX, 1, [255,255,100], 2, cv2.LINE_AA)
             for path_trail in paths_trace:
-                if len(path_trail) > 2:
-                    for l in range(1, len(path_trail)):
-                        im0 = cv2.line(im0, path_trail[l-1], path_trail[l], color=[0, 0, 255], thickness=2)
+                if len(path_trail[1]) > 2:
+                    for l in range(1, len(path_trail[1])):
+                        im0 = cv2.line(im0, path_trail[1][l-1], path_trail[1][l], color=[0, 0, 255], thickness=2)
             
             if view_img:
                 cv2.imshow(str(p), im0)
@@ -260,13 +263,13 @@ def parse_opt():
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--view-img', default=False, action='store_true', help='show results')
+    parser.add_argument('--view-img', default=True, action='store_true', help='show results')            #####
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')
-    parser.add_argument('--nosave', default=False, action='store_true', help='do not save images/videos')
+    parser.add_argument('--nosave', default=True, action='store_true', help='do not save images/videos') #####
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --classes 0, or --classes 0 2 3')
-    parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
+    parser.add_argument('--agnostic-nms', default=True, action='store_true', help='class-agnostic NMS')  #####
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--visualize', action='store_true', help='visualize features')
     parser.add_argument('--update', action='store_true', help='update all models')
