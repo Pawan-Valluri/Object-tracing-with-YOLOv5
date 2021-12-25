@@ -42,6 +42,38 @@ def get_center(xyxy):
 def distxy(pt1, pt2):
     return math.sqrt((pt2[0]-pt1[0])**2 + (pt2[1]-pt1[1])**2)
 
+coords_lst = [[[350, 370],[600, 400], 'up'], [[740, 590], [1180, 555], 'down']]
+
+def process_coords(coords_lst=coords_lst):
+    for coord in coords_lst:
+        x1, y1, x2, y2 = coord[0][0], coord[0][1], coord[1][0], coord[1][1]
+        m = (y2-y1)/(x2-x1)
+        c = y2 - m*x2
+        coord.append(m)
+        coord.append(c)
+    return coords_lst
+coords_lst = process_coords(coords_lst)
+
+
+def check_area(xy, coords):
+    if min(coords[0][0], coords[1][0]) < xy[0] and max(coords[0][0], coords[1][0]) > xy[0]:
+        if coords[2] == "down":
+            return True if xy[1] > (coords[3]*xy[0] + coords[4]) else False
+        elif coords[2] == "up":
+            return True if xy[1] < (coords[3]*xy[0] + coords[4]) else False
+    return False
+
+def check_exit(im0, paths_trace, coords_lst, paths_count):
+    for coords in coords_lst:
+        mode = coords[2]
+        im0 = cv2.line(im0, coords[0], coords[1], thickness=2, color=[255,255,255])
+        for path_trail in paths_trace:
+            if len(path_trail[1]) > 2:
+                if check_area(path_trail[1][-1], coords) and not check_area(path_trail[1][-2], coords):
+                    paths_count += 1
+                    path_trail[0] = 10
+    return im0, paths_count
+
 
 @torch.no_grad()
 def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
@@ -181,7 +213,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
             if len(paths_trace)==0: # this happens for the first frame
                 for k in det_current:
                     paths_trace.append([0, [k]]) # new paths
-                    path_count += 1
+                    # path_count += 1
             else:
                 for k in range(len(paths_trace)):
                     min_dist = 10000
@@ -209,7 +241,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                 if len(det_current):
                     for j in det_current:
                         paths_trace.append([0, [j]]) # new path
-                        path_count += 1
+                        # path_count += 1
             # print(paths_trace)
 
             # Print time (inference-only)
@@ -217,6 +249,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
             # Stream results
             im0 = annotator.result()
+            im0, path_count = check_exit(im0, paths_trace, coords_lst, path_count)
             im0 = cv2.putText(im0, f"vehicles_now: {paths_now}, Vehicles_total: {path_count}", (0,30), cv2.FONT_HERSHEY_SIMPLEX, 1, [255,255,100], 2, cv2.LINE_AA)
             for path_trail in paths_trace:
                 if len(path_trail[1]) > 2:
