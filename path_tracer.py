@@ -176,38 +176,37 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
-            
-            det_buffer.append(det_current)
-            det_buffer.pop(0)
             paths_to_be_popped = []
             if len(paths_trace)==0: # this happens for the first frame
                 for k in det_current:
-                    paths_trace.append([k])
+                    paths_trace.append([0, [k]]) # new paths
             else:
                 for k in range(len(paths_trace)):
                     min_dist = 10000
                     for j in range(len(det_current)):
-                        dist = distxy(paths_trace[k][-1], det_current[j])
+                        dist = distxy(paths_trace[k][1][-1], det_current[j])
                         if dist < min_dist:
                             min_dist =  dist
                             closest = j
                     if min_dist < 30:
-                        paths_trace[k].append(det_current[closest])
+                        paths_trace[k][1].append(det_current[closest])
                         det_current.pop(closest)
                     else:
                         paths_to_be_popped.append(paths_trace[k])
+                        paths_trace[k][0] += 1
                 
                 for k in paths_to_be_popped:
-                    paths_trace.remove(k)
+                    if k[0] > 3:
+                        paths_trace.remove(k)
                 
                 
                 for k in paths_trace:
-                    while len(k) > 5:
-                        k.pop(0)
+                    while len(k[1]) > 5:
+                        k[1].pop(0)
                                     
                 if len(det_current):
                     for j in det_current:
-                        paths_trace.append([j])
+                        paths_trace.append([0, [j]]) # new path
             # print(paths_trace)
 
             # Print time (inference-only)
@@ -216,9 +215,9 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
             # Stream results
             im0 = annotator.result()
             for path_trail in paths_trace:
-                if len(path_trail) > 2:
-                    for l in range(1, len(path_trail)):
-                        im0 = cv2.line(im0, path_trail[l-1], path_trail[l], color=[0, 0, 255], thickness=2)
+                if len(path_trail[1]) > 2:
+                    for l in range(1, len(path_trail[1])):
+                        im0 = cv2.line(im0, path_trail[1][l-1], path_trail[1][l], color=[0, 0, 255], thickness=2)
             
             if view_img:
                 cv2.imshow(str(p), im0)
