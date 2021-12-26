@@ -269,8 +269,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
             im0 = check_exit(im0, paths_trace, coords_lst)
             for coord in coords_lst:
                 go_down = 0
-                for i in coord[5].keys():
-                    im0 = cv2.putText(im0, f"{names[int(i)]}: {coord[5][i]}", (coord[1][0] +10, coord[1][1]+go_down), cv2.FONT_HERSHEY_SIMPLEX, smaller_font_scale, colors(int(i), True), smaller_font_thickness)
+                for cord in coord[5].keys():
+                    im0 = cv2.putText(im0, f"{names[int(cord)]}: {coord[5][cord]}", (coord[1][0] +10, coord[1][1]+go_down), cv2.FONT_HERSHEY_SIMPLEX, smaller_font_scale, colors(int(i), True), smaller_font_thickness)
                     go_down += smaller_font_size[0][1]
             im0 = cv2.putText(im0, f"Vehicles now: {paths_now}, Vehicles total: {paths_per_area}", (10,30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, [161, 165, 66], 2)
             for path_trail in paths_trace:
