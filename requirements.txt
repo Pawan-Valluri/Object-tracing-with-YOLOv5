@@ -7,7 +7,7 @@ opencv-python==4.5.4.60
 Pillow==8.4.0
 PyYAML==6.0
 requests>=2.23.0
-scipy>=1.4.1
+scipy==1.7.3
 torch==1.9.0
 torchvision==0.10.0
 tqdm>=4.41.0
