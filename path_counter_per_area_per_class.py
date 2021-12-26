@@ -28,7 +28,11 @@ ROOT = FILE.parents[0]  # YOLOv5 root directory
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
-
+smaller_font_scale = 0.6
+smaller_font_thickness = 2
+smaller_font_size = list(cv2.getTextSize("test",cv2.FONT_HERSHEY_SIMPLEX, smaller_font_scale, smaller_font_thickness))
+smaller_font_size[0] = list(smaller_font_size[0])
+smaller_font_size[0][1] += 8
 from yolov5.models.common import DetectMultiBackend
 from yolov5.utils.datasets import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
 from yolov5.utils.general import (LOGGER, check_file, check_img_size, check_imshow, check_requirements, colorstr,
@@ -204,11 +208,12 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
                     if save_img or save_crop or view_img:  # Add bbox to image
-                        c = int(cls)  # integer class
+                        c = int(cls)  # integer class 
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {int(conf*100)}%')
-                        annotator.box_label(xyxy, label, color=colors(c, True))
+                        if names[c] in ["car", "truck", "bus", "motorcycle", "boat"]:
+                            annotator.box_label(xyxy, label, color=colors(c, True))
                         center = get_center(xyxy)
-                        det_current.append([center, names[c], int(conf*100)*center[0]*center[1]])  #####################
+                        det_current.append([center, str(c), int(conf*100)*center[0]*center[1]])  #####################
 
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
@@ -253,15 +258,25 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
             # Print time (inference-only)
             LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
-            paths_per_area = [i[5] for i in coords_lst]
+            paths_per_area = []
+            for coord in range(len(coords_lst)):
+                paths_per_area.append({})
+                for key in coords_lst[coord][5].keys():
+                    paths_per_area[coord][names[int(key)]] = coords_lst[coord][5][key]
+            # paths_per_area = [i[5] for i in coords_lst]
             # Stream results
             im0 = annotator.result()
             im0 = check_exit(im0, paths_trace, coords_lst)
-            im0 = cv2.putText(im0, f"vehicles_now: {paths_now}, Vehicles_total: {paths_per_area}", (0,30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, [0, 0, 255], 2)
+            for coord in coords_lst:
+                go_down = 0
+                for i in coord[5].keys():
+                    im0 = cv2.putText(im0, f"{names[int(i)]}: {coord[5][i]}", (coord[1][0] +10, coord[1][1]+go_down), cv2.FONT_HERSHEY_SIMPLEX, smaller_font_scale, colors(int(i), True), smaller_font_thickness)
+                    go_down += smaller_font_size[0][1]
+            im0 = cv2.putText(im0, f"Vehicles now: {paths_now}, Vehicles total: {paths_per_area}", (10,30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, [161, 165, 66], 2)
             for path_trail in paths_trace:
                 if len(path_trail[1]) > 2:
                     for l in range(1, len(path_trail[1])):
-                        im0 = cv2.line(im0, path_trail[1][l-1], path_trail[1][l], color=[255, 255, 0], thickness=2)
+                        im0 = cv2.line(im0, path_trail[1][l-1], path_trail[1][l], color=colors(int(path_trail[2]), True), thickness=2)
             
             if view_img:
                 cv2.imshow(str(p), im0)
@@ -309,7 +324,7 @@ def parse_opt():
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')
-    parser.add_argument('--nosave', default=False, action='store_true', help='do not save images/videos') #####
+    parser.add_argument('--nosave', default=True, action='store_true', help='do not save images/videos') #####
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --classes 0, or --classes 0 2 3')
     parser.add_argument('--agnostic-nms', default=True, action='store_true', help='class-agnostic NMS')  #####
     parser.add_argument('--augment', action='store_true', help='augmented inference')
