@@ -42,13 +42,45 @@ def get_center(xyxy):
 def distxy(pt1, pt2):
     return math.sqrt((pt2[0]-pt1[0])**2 + (pt2[1]-pt1[1])**2)
 
+coords_lst = [[[350, 370],[600, 400], 'up'], [[740, 590], [1180, 555], 'down']]
+
+def process_coords(coords_lst=coords_lst):
+    for coord in coords_lst:
+        x1, y1, x2, y2 = coord[0][0], coord[0][1], coord[1][0], coord[1][1]
+        m = (y2-y1)/(x2-x1)
+        c = y2 - m*x2
+        coord.append(m)
+        coord.append(c)
+    return coords_lst
+coords_lst = process_coords(coords_lst)
+
+
+def check_area(xy, coords):
+    if min(coords[0][0], coords[1][0]) < xy[0] and max(coords[0][0], coords[1][0]) > xy[0]:
+        if coords[2] == "down":
+            return True if xy[1] > (coords[3]*xy[0] + coords[4]) else False
+        elif coords[2] == "up":
+            return True if xy[1] < (coords[3]*xy[0] + coords[4]) else False
+    return False
+
+def check_exit(im0, paths_trace, coords_lst, paths_count):
+    for coords in coords_lst:
+        mode = coords[2]
+        im0 = cv2.line(im0, coords[0], coords[1], thickness=2, color=[255,255,255])
+        for path_trail in paths_trace:
+            if len(path_trail[1]) > 2:
+                if check_area(path_trail[1][-1], coords) and not check_area(path_trail[1][-2], coords):
+                    paths_count += 1
+                    path_trail[0] = 10
+    return im0, paths_count
+
 
 @torch.no_grad()
 def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         source=ROOT / 'data/images',  # file/dir/URL/glob, 0 for webcam
         imgsz=640,  # inference size (pixels)
         conf_thres=0.25,  # confidence threshold
-        iou_thres=0.45,  # NMS IOU threshold
+        iou_thres=0.75,  # NMS IOU threshold
         max_det=1000,  # maximum detections per image
         device='',  # cuda device, i.e. 0 or 0,1,2,3 or cpu
         view_img=False,  # show results
@@ -57,7 +89,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         save_crop=False,  # save cropped prediction boxes
         nosave=False,  # do not save images/videos
         classes=None,  # filter by class: --class 0, or --class 0 2 3
-        agnostic_nms=False,  # class-agnostic NMS
+        agnostic_nms=True,  # class-agnostic NMS
         augment=False,  # augmented inference
         visualize=False,  # visualize features
         update=False,  # update all models
@@ -108,6 +140,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     # Run inference
     model.warmup(imgsz=(1, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
+    path_count = 0  ###############
     paths_trace = []  ###############    
     for path, im, im0s, vid_cap, s in dataset:
         t1 = time_sync()
@@ -175,10 +208,12 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
+            paths_now = len(det_current)
             paths_to_be_popped = []
             if len(paths_trace)==0: # this happens for the first frame
                 for k in det_current:
                     paths_trace.append([0, [k]]) # new paths
+                    # path_count += 1
             else:
                 for k in range(len(paths_trace)):
                     min_dist = 10000
@@ -206,6 +241,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                 if len(det_current):
                     for j in det_current:
                         paths_trace.append([0, [j]]) # new path
+                        # path_count += 1
             # print(paths_trace)
 
             # Print time (inference-only)
@@ -213,6 +249,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
             # Stream results
             im0 = annotator.result()
+            im0, path_count = check_exit(im0, paths_trace, coords_lst, path_count)
+            im0 = cv2.putText(im0, f"vehicles_now: {paths_now}, Vehicles_total: {path_count}", (0,30), cv2.FONT_HERSHEY_SIMPLEX, 1, [255,255,100], 2, cv2.LINE_AA)
             for path_trail in paths_trace:
                 if len(path_trail[1]) > 2:
                     for l in range(1, len(path_trail[1])):
@@ -260,13 +298,13 @@ def parse_opt():
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--view-img', default=True, action='store_true', help='show results')
+    parser.add_argument('--view-img', default=True, action='store_true', help='show results')            #####
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')
-    parser.add_argument('--nosave', default=True, action='store_true', help='do not save images/videos')
+    parser.add_argument('--nosave', default=True, action='store_true', help='do not save images/videos') #####
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --classes 0, or --classes 0 2 3')
-    parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
+    parser.add_argument('--agnostic-nms', default=True, action='store_true', help='class-agnostic NMS')  #####
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--visualize', action='store_true', help='visualize features')
     parser.add_argument('--update', action='store_true', help='update all models')
