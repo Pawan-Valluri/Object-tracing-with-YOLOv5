@@ -112,7 +112,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         dnn=False,  # use OpenCV DNN for ONNX inference
         ):
     source = str(source)
-    source = "/home/bubble/Downloads/road01.mp4"
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
     is_url = source.lower().startswith(('rtsp://', 'rtmp://', 'http://', 'https://'))
@@ -149,8 +148,11 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     # Run inference
     model.warmup(imgsz=(1, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
-    paths_trace = []  ###############    
+    paths_trace = []  ###############   
+    frame_count = 0 
+    tf1 = time_sync()
     for path, im, im0s, vid_cap, s in dataset:
+        frame_count += 1
         t1 = time_sync()
         im = torch.from_numpy(im).to(device)
         im = im.half() if half else im.float()  # uint8 to fp16/32
@@ -257,7 +259,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
             # print(paths_trace)
 
             # Print time (inference-only)
-            LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
+            if frame_count%50 == 0:
+                sys.stdout.write(f'{s}Done. ({t3 - t2:.3f}s)'+"\r")
             paths_per_area = []
             for coord in range(len(coords_lst)):
                 paths_per_area.append({})
@@ -304,6 +307,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
     LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
+    tf2 = time_sync()
+    print("eval_time: ",tf2 - tf1)
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}{s}")
@@ -320,7 +325,7 @@ def parse_opt():
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--view-img', default=True, action='store_true', help='show results')            #####
+    parser.add_argument('--view-img', default=False, action='store_true', help='show results')            #####
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')

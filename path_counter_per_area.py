@@ -104,7 +104,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         dnn=False,  # use OpenCV DNN for ONNX inference
         ):
     source = str(source)
-    source = "/home/bubble/Downloads/road01.mp4"
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
     is_url = source.lower().startswith(('rtsp://', 'rtmp://', 'http://', 'https://'))
@@ -142,7 +141,9 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     model.warmup(imgsz=(1, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
     paths_trace = []  ###############    
+    frame_number = 0
     for path, im, im0s, vid_cap, s in dataset:
+        frame_number += 1
         t1 = time_sync()
         im = torch.from_numpy(im).to(device)
         im = im.half() if half else im.float()  # uint8 to fp16/32
@@ -245,7 +246,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
             # print(paths_trace)
 
             # Print time (inference-only)
-            LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
+            if frame_number%50 == 0:
+                LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
             paths_per_area = [i[5][0] for i in coords_lst]
             # Stream results
             im0 = annotator.result()
@@ -298,11 +300,11 @@ def parse_opt():
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--view-img', default=True, action='store_true', help='show results')            #####
+    parser.add_argument('--view-img', default=False, action='store_true', help='show results')            #####
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')
-    parser.add_argument('--nosave', default=True, action='store_true', help='do not save images/videos') #####
+    parser.add_argument('--nosave', default=False, action='store_true', help='do not save images/videos') #####
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --classes 0, or --classes 0 2 3')
     parser.add_argument('--agnostic-nms', default=True, action='store_true', help='class-agnostic NMS')  #####
     parser.add_argument('--augment', action='store_true', help='augmented inference')
