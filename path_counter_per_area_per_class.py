@@ -40,50 +40,50 @@ from yolov5.utils.general import (LOGGER, check_file, check_img_size, check_imsh
 from yolov5.utils.plots import Annotator, colors, save_one_box
 from yolov5.utils.torch_utils import select_device, time_sync
 
-def get_center(xyxy):
+def get_center(xyxy): # funtion to get center of a box
     return [int((xyxy[0].item() + xyxy[2].item())/2), int((xyxy[1].item() + xyxy[3].item())/2) ]
 
-def distxy(pt1, pt2):
+def distxy(pt1, pt2): # function to get distance between two points
     return math.sqrt((pt2[0]-pt1[0])**2 + (pt2[1]-pt1[1])**2)
 
-coords_lst = [[[350, 370],[600, 400], 'up'], [[740, 590], [1180, 555], 'down']]
+coords_lst = [[[350, 370],[600, 400], 'up'], [[740, 590], [1180, 555], 'down']] # [[Starting point in x, y], [ending points in x, y], '<direction of area after objects crossed line>'] (can add any number of lines) 
+# Info of lines for counting (if object crosses in a direction, then the object will be counted)
 
 def process_coords(coords_lst=coords_lst):
-    for coord in coords_lst:
+    for coord in coords_lst: # The data for equation "y = m*x + c" will be extracted from the coords_lst
         x1, y1, x2, y2 = coord[0][0], coord[0][1], coord[1][0], coord[1][1]
         m = (y2-y1)/(x2-x1)
         c = y2 - m*x2
-        coord.append(m)
-        coord.append(c)
-        coord.append({})
+        coord.append(m) # m in y = m*x + c 
+        coord.append(c) # c in y = m*x + c
+        coord.append({}) # Dictionary for storing counts of objects that crossed the line
     return coords_lst
 coords_lst = process_coords(coords_lst)
 
 
-def check_area(xy, coords):
+def check_area(xy, coords):  # For checking whether the object fell into the area 'up' or 'down' of the line
     if min(coords[0][0], coords[1][0]) < xy[0] and max(coords[0][0], coords[1][0]) > xy[0]:
-        if coords[2] == "down":
-            return True if xy[1] > (coords[3]*xy[0] + coords[4]) else False
-        elif coords[2] == "up":
-            return True if xy[1] < (coords[3]*xy[0] + coords[4]) else False
+        if coords[2] == "down":   
+            return True if xy[1] > (coords[3]*xy[0] + coords[4]) else False ############## If y1 > m*x1 + c then the point is below the line ##############
+        elif coords[2] == "up": 
+            return True if xy[1] < (coords[3]*xy[0] + coords[4]) else False ############## If y1 < m*x1 + c then the point is above the line ##############
     return False
 
-def check_exit(im0, paths_trace, coords_lst):
+def check_exit(im0, paths_trace, coords_lst): # To check whether the object just crossed the line
     for coords in coords_lst:
-        mode = coords[2]
-        im0 = cv2.line(im0, coords[0], coords[1], thickness=2, color=[255,255,255])
-        for path_trail in paths_trace:
-            if len(path_trail[1]) > 2:
-                if check_area(path_trail[1][-1], coords) and not check_area(path_trail[1][-2], coords):
-                    # print(len(paths_trace), "already:", coords[5].keys())
-                    if path_trail[2] in coords[5].keys():
-                        coords[5][path_trail[2]] += 1
+        mode = coords[2] # 'up' or 'down'
+        im0 = cv2.line(im0, coords[0], coords[1], thickness=2, color=[255,255,255]) # drawing line ot counting
+        for path_trail in paths_trace: 
+            if len(path_trail[1]) > 2: # path_trail[1] has the points of the path of object
+                if check_area(path_trail[1][-1], coords) and not check_area(path_trail[1][-2], coords): # Crossing condition: 'last point crossed' and 'previous point didn't cross the line'
+                    if path_trail[2] in coords[5].keys(): # If entry of object there in counts
+                        coords[5][path_trail[2]] += 1 # Incrementing count
                     else:
-                        coords[5][path_trail[2]] = 1
+                        coords[5][path_trail[2]] = 1 # Making a new entry if not made before
                     path_trail[0] = 10
     return im0
 
-
+ ### yolov5 code from here (note: if you are going through code take a look at lines with "##############". These lines are modifications on yolov5 flow for tracker)
 @torch.no_grad()
 def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         source=ROOT / 'data/images',  # file/dir/URL/glob, 0 for webcam
@@ -148,7 +148,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     # Run inference
     model.warmup(imgsz=(1, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
-    paths_trace = []  ###############   
+    paths_trace = []  ############## list to store paths of objects ##############
     frame_count = 0 
     tf1 = time_sync()
     for path, im, im0s, vid_cap, s in dataset:
@@ -171,7 +171,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         # NMS
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
         dt[2] += time_sync() - t3
-        det_current = [] ####################
+        det_current = [] ############## list to store detections in current frame ##############
 
         # Second-stage classifier (optional)
         # pred = utils.general.apply_classifier(pred, classifier_model, im, im0s)
@@ -215,68 +215,72 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         if names[c] in ["car", "truck", "bus", "motorcycle", "boat"]:
                             annotator.box_label(xyxy, label, color=colors(c, True))
                         center = get_center(xyxy)
-                        det_current.append([center, str(c), int(conf*100)*center[0]*center[1]])  #####################
+                        det_current.append([center, str(c), int(conf*100)*center[0]*center[1]])  ############## Adding a detection to list in the form of [center, label, confidence] ##############
 
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-
-            paths_now = len(det_current)
-            paths_to_be_popped = []
-            if len(paths_trace)==0: # this happens for the first frame
+            
+            ############## The lines below are for the tracker ##############
+            paths_now = len(det_current) # number of paths to be made in the current frame
+            paths_to_be_popped = [] 
+            if len(paths_trace)==0: # This is empty list for paths (happens only once)
                 for k in det_current:
-                    paths_trace.append([0, [k[0]], k[1], k[2]]) # new paths
+                    paths_trace.append([0, [k[0]], k[1], k[2]]) # All points are considered into new paths (happens only once)
                     # path_count += 1
             else:
                 for k in range(len(paths_trace)):
                     min_dist = 10000
                     for j in range(len(det_current)):
-                        dist = distxy(paths_trace[k][1][-1], det_current[j][0])
-                        if dist < min_dist:
+                        dist = distxy(paths_trace[k][1][-1], det_current[j][0]) # Distance between the last point of the path and the current detetion center point
+                        if dist < min_dist: # Finding the closest point 
                             min_dist =  dist
                             closest = j
-                    if min_dist < 30:
+
+                    if min_dist < 30: # If the closest point is closer than 30 units, then it'll be added into the path
                         paths_trace[k][1].append(det_current[closest][0])
-                        if paths_trace[k][3] < det_current[closest][2]:
-                            paths_trace[k][2], paths_trace[k][3] = det_current[closest][1], det_current[closest][2]
-                        det_current.pop(closest)
+                        if paths_trace[k][3] < det_current[closest][2]: # If the closest object has higher confidence
+                            paths_trace[k][2], paths_trace[k][3] = det_current[closest][1], det_current[closest][2] # update the class name of object and its confidence
+                        det_current.pop(closest) # Remove object from current detetions for further processing
                     else:
-                        paths_to_be_popped.append(paths_trace[k])
-                        paths_trace[k][0] += 1
+                        paths_to_be_popped.append(paths_trace[k]) # No closest point. so, marking it for removing after certain frames to save memory 
+                        paths_trace[k][0] += 1 # Countdown to remove the path
                 
                 for k in paths_to_be_popped:
-                    if k[0] > 3:
+                    if k[0] > 3: # If the countdown is grater than 3, then it is removed
                         paths_trace.remove(k)
                 
                 
                 for k in paths_trace:
-                    while len(k[1]) > 5:
+                    while len(k[1]) > 5: # Clipping the path to 5 points to save memory
                         k[1].pop(0)
                                     
                 if len(det_current):
                     for j in det_current:
-                        paths_trace.append([0, [j[0]], j[1], j[2]]) # new path
+                        paths_trace.append([0, [j[0]], j[1], j[2]]) # New path added
                         # path_count += 1
             # print(paths_trace)
 
             # Print time (inference-only)
             if frame_count%50 == 0:
                 sys.stdout.write(f'{s}Done. ({t3 - t2:.3f}s)'+"\r")
-            paths_per_area = []
+            paths_per_area = [] # list for printing current counts per line 
             for coord in range(len(coords_lst)):
-                paths_per_area.append({})
+                paths_per_area.append({}) # dictionary to store counts
                 for key in coords_lst[coord][5].keys():
                     paths_per_area[coord][names[int(key)]] = coords_lst[coord][5][key]
             # paths_per_area = [i[5] for i in coords_lst]
             # Stream results
             im0 = annotator.result()
-            im0 = check_exit(im0, paths_trace, coords_lst)
-            for coord in coords_lst:
+            im0 = check_exit(im0, paths_trace, coords_lst) # triggering function to check whether the objects crossed the line and increase counts
+            
+            for coord in coords_lst: # loop to print counts in the image
                 go_down = 0
                 for cord in coord[5].keys():
                     im0 = cv2.putText(im0, f"{names[int(cord)]}: {coord[5][cord]}", (coord[1][0] +10, coord[1][1]+go_down), cv2.FONT_HERSHEY_SIMPLEX, smaller_font_scale, colors(int(cord), True), smaller_font_thickness)
                     go_down += smaller_font_size[0][1]
             im0 = cv2.putText(im0, f"Vehicles now: {paths_now}, Vehicles total: {paths_per_area}", (10,30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, [161, 165, 66], 2)
-            for path_trail in paths_trace:
+            
+            for path_trail in paths_trace: # loop for drawing the path trail of the objects
                 if len(path_trail[1]) > 2:
                     for l in range(1, len(path_trail[1])):
                         im0 = cv2.line(im0, path_trail[1][l-1], path_trail[1][l], color=colors(int(path_trail[2]), True), thickness=2)
